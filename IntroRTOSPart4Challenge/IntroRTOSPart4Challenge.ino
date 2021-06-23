@@ -2,6 +2,11 @@
  * Digikey Intro to FreeRTOS w/ Shawn Hymel
  * Challenge 4: Character Echo w/ Heap memory
  * Rob Garrone
+ * 
+ * NOTES:
+ * Had to peek at answer - volatile on the flag REALLY matters. 
+ * Learned a ton, largely turned into a copy of SH's solution as I debugged. 
+ * Its the understanding that counts!
  */
 
 // Use only core 1 for demo purposes
@@ -12,37 +17,47 @@ static const BaseType_t app_cpu = 1;
 #endif
 
 //global variables
-bool printFlag = 0; //flag for telling print task we have something to echo
-char message[80];
+static volatile bool msgReady = 0; //flag for telling print task we have something to echo
+static const int arrsize = 255;
+static char *msgptr = NULL;
 
 //Listen Task
 void getIncomingSerial(void *parameter)
 {
-  static const int arrsize = 80; //goes to stack - n.c. in heap
-  int idx = 0; //4 bytes
-  char * incoming =  (char *)pvPortMalloc(arrsize*sizeof(char)); //80 char (byte) piece of heap 
+   char c;
+   char msgbuf[arrsize];
+   uint8_t idx = 0;
 
-  while(1){
-    if(Serial.available() > 0) //if we have something
+   memset(msgbuf, 0, arrsize);
+
+
+   while(1)
+   {
+    if(Serial.available()>0)
     {
-      incoming[idx] = Serial.read(); // assign read value to 
-
-      if((*)incoming[idx] == "\n")
+      c=Serial.read();
+      
+      if(idx < arrsize-1)
       {
-        strcpy(message,incoming);
-        printFlag = 1; //notify print task that we have something
-        idx = 0; //reset index
-        pvPortFree(incoming); //free our memory
-        return; //job done
+          msgbuf[idx] = c; //place char in buffer
+          idx++; //THEN increment
       }
-      else idx++; //if its not \n, increment index and press on
-    }
-    else 
-    {
-      // if we don't have anything over serial, free heap.
-      pvPortFree(incoming);
-      return;
-    } 
+          if (c=='\n')
+          {
+            msgbuf[idx-1] = '\0'; //null terminate to make it a string
+            if(msgReady == 0)
+            {
+              msgptr = (char *)pvPortMalloc(idx*sizeof(char));
+              configASSERT(msgptr);
+              
+              memcpy(msgptr,msgbuf,idx);
+              
+              msgReady = 1; //set flag to true
+            }
+            memset(msgbuf,0,arrsize);//wipe message
+            idx=0; //set idx to 0
+          }
+     }
   }
 }
 
@@ -50,11 +65,18 @@ void printMessage(void *parameter)
 {
   while(1)
   {
-    if(printFlag==1)
+    if(msgReady==1)
     {
-      Serial.print(message); //print message
-      printFlag == 0; //reset printFlag
-    }
+      Serial.println(msgptr); //print message
+
+            // Give amount of free heap memory (uncomment if you'd like to see it)
+      //Serial.print("Free heap (bytes): ");
+      //Serial.println(xPortGetFreeHeapSize());
+      
+      vPortFree(msgptr);
+      msgptr = NULL;
+      msgReady = 0; //reset printFlag
+      }
   }
 }
 
@@ -67,7 +89,9 @@ void setup()
   //wait a second for config
   vTaskDelay(1000/portTICK_PERIOD_MS);
   //show time!
-  Serial.println("Program will echo what is given");
+  Serial.println();
+  Serial.println("---------------------------------");
+  Serial.println("Program will echo what is given:");
 
   xTaskCreatePinnedToCore(    //use xTaskCreate() in vanilla FREERTOS
     getIncomingSerial,              //our task function
