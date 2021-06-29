@@ -19,6 +19,8 @@
  * 
  * within some task
  * 
+ * EDIT 6/29/21: I added the semaphore implementation shown in lecture 7 for semaphores and commented out the mutex code. Same behavior.
+ * 
  * Date: June 28, 2021
  * Author: Rob Garrone
  */
@@ -37,7 +39,8 @@
 static const int led_pin = LED_BUILTIN;
 
 //Global Variables
-static SemaphoreHandle_t mutex = NULL;
+//static SemaphoreHandle_t mutex = NULL;
+static SemaphoreHandle_t binsem = NULL;
 
 //*****************************************************************************
 // Tasks
@@ -45,12 +48,15 @@ static SemaphoreHandle_t mutex = NULL;
 // Blink LED based on rate passed by parameter
 void blinkLED(void *parameters) {
   int num = 0;
-  if(mutex != NULL) //if we have a created mutex
+  //if(mutex != NULL) //if we have a created mutex
+  if(binsem !=NULL)
   {
     // Copy the parameter into a local variable
     //knowledge check: this is dereferencing the void pointer parameters after it gets casted to an int pointer.
     num = *(int *)parameters;  
-    xSemaphoreGive(mutex); //give the mutex back - its just a flag saying "Hey we set this varible"
+    //xSemaphoreGive(mutex); //give the mutex back - its just a flag saying "Hey we set this varible"
+    xSemaphoreGive(binsem); //give the semaphore a good-to-go signal - not a lock
+
   }
     
 
@@ -94,8 +100,10 @@ void setup() {
   Serial.print("Sending: ");
   Serial.println(delay_arg);
 
-  mutex = xSemaphoreCreateMutex(); //
-  xSemaphoreTake(mutex,portMAX_DELAY); // take mutex
+  //mutex = xSemaphoreCreateMutex();
+  binsem = xSemaphoreCreateBinary(); //initialized to 0, no need to take before creating task
+
+  //xSemaphoreTake(mutex,portMAX_DELAY); // take mutex
 
   // Start task 1
   xTaskCreatePinnedToCore(blinkLED,
@@ -108,8 +116,9 @@ void setup() {
 
   //need to stop setup task from completing before blinkLED reads in delay_arg!
   //mutex is given back within blinkLED task
-  xSemaphoreTake(mutex,portMAX_DELAY);//from the docs, portMAX_DELAY suspends indefinitely
-  
+  //xSemaphoreTake(mutex,portMAX_DELAY);//from the docs, portMAX_DELAY suspends indefinitely
+  xSemaphoreTake(binsem,portMAX_DELAY);//from the docs, portMAX_DELAY suspends indefinitely
+
 
   // Show that we accomplished our task of passing the stack-based argument
   Serial.println("Done!");
