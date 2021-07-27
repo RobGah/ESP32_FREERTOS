@@ -55,6 +55,7 @@ static const int adc_pin = A0;              // Analog input pin
 static const char command[] = "avg";        // CLI command to recognize
 static const uint8_t userbuffersize = 255;  // User's input buffer
 static const uint8_t stringbuffersize = 25;
+static const int cli_delay = 20;
 
 
 // Globals
@@ -189,6 +190,8 @@ void CLIHandler (void *parameter)
         Serial.print(c);
       }
     }
+    // This is needed to stop this task from hogging up processor time from CalculateAvg.
+    vTaskDelay(cli_delay / portTICK_PERIOD_MS); 
   }
 }
 
@@ -206,7 +209,7 @@ void CalculateAvg(void * parameter)
       sum += read_buf_ptr[i];
     }
 
-    avg = (float)sum/BUF_LEN;
+    avg = (float)sum/BUF_SIZE;
     
     portENTER_CRITICAL(&spinlock);
     adc_avg = avg;
